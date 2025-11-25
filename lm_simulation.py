@@ -9,7 +9,7 @@ Usage
 python main.py
 
 # force CPU, 5 repetitions, tau = 2,3,5
-python main.py --device cpu --reps 5 --tau_vals 2,3,5
+python main.py --device cpu --reps 100 --tau_vals 2,3,5
 """
 
 # ── stdlib ────────────────────────────────────────────────────────────
