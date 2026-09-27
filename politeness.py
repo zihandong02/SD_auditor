@@ -27,6 +27,8 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from src.estimators import (
     lm_fit_ols,
+    reset_m_spec_norm,
+    get_m_spec_norm,
 )
 from src.lm_mono_debias import (
     lm_mono_debias_budget_constrained_obtain_alpha_mcar_cov00,
@@ -47,24 +49,23 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser("Politeness Experiment")
 
     # ---------- device & RNG ----------
-    parser.add_argument("--device", default="auto", help="'auto' = get_device(); otherwise 'cpu', 'cuda', 'cuda:1', ...")
-    parser.add_argument("--seed", default=42, type=int)
-
-    # ---------- distributed ----------
-    parser.add_argument("--distributed", action="store_true", help="Enable torch.distributed")
+    parser.add_argument("--device", default="auto", help="'auto' = CUDA if available; otherwise 'cpu', 'cuda', 'cuda:1', ...")
+    parser.add_argument("--seed", default=43, type=int)
 
     # ---------- batch sizes & repetitions ----------
-    parser.add_argument("--n1", default=1000, type=int, help="Number of samples for stage 1")
-    parser.add_argument("--n2_per_rep", default=2000, type=int, help="Number of samples for each stage 2 repetition")
-    parser.add_argument("--reps", default=10, type=int)
+    parser.add_argument("--n1", default=1500, type=int, help="Number of samples for stage 1")
+    parser.add_argument("--n2_per_rep", default=3000, type=int, help="Number of samples for each stage 2 repetition")
+    parser.add_argument("--reps", default=100, type=int)
 
     # ---------- MCAR / CI parameters ----------
     parser.add_argument("--alpha_level", default=0.1, type=float)
     parser.add_argument("--tau_vals", default="3,5,10", help="Comma-separated list of tau values")
-    parser.add_argument("--c_vals", default="5,10", help="Comma-separated list of c values")
-    parser.add_argument("--alpha_init", default="1.0,0.0,0.0", help="Initial alpha values")
-    
-    parser.add_argument("--n_total", default=4000, type=int, help="Total number of rows to use from the dataset")
+    parser.add_argument("--c_vals", default="20,50,100,200", help="Comma-separated list of c values")
+    parser.add_argument("--alpha_init", default="1.0,0.0,0.0",
+                        help="Stage-1 masking distribution over the three patterns; "
+                             "the default leaves the stage-1 sample fully observed")
+
+    parser.add_argument("--n_total", default=5515, type=int, help="Total number of rows to use from the dataset")
 
 
     return parser.parse_args()
@@ -114,6 +115,7 @@ def run_politeness_experiment(
     """Runs the core politeness experiment for a given tau and c."""
     device, dtype = X.device, X.dtype
     torch.manual_seed(seed)
+    reset_m_spec_norm()
 
     N = X.shape[0]
     n2_pool_size = N - n1
@@ -232,6 +234,7 @@ def run_politeness_experiment(
     return dict(
         alpha_opt=((alpha_opt.detach().cpu() * 1e4).round() / 1e4).tolist(),
         cov00_opt=float(cov00_opt),
+        max_M_spec_norm=float(get_m_spec_norm()),
         mean_l2_opt=float(sum(err_opt) / reps),
         mean_l2_mar=float(sum(err_mar) / reps),
         mean_l2_base=float(sum(err_base) / reps),
@@ -249,8 +252,11 @@ def run_politeness_experiment(
 def main(args):
     """Main driver."""
     # ── setup ──────────────────────────────────────────────────────────────────
-    set_global_seed(42)
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    set_global_seed(args.seed)
+    if args.device == "auto":
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    else:
+        device = torch.device(args.device)
     dtype = torch.float32
     
     # -- paths and constants
@@ -277,7 +283,9 @@ def main(args):
     # -- experiment params
     tau_vals = [float(v) for v in args.tau_vals.split(",")]
     c_vals = [float(v) for v in args.c_vals.split(",")]
-    alpha_init = torch.tensor([1/3, 1/3, 1/3], device=device, dtype=dtype)
+    alpha_init = torch.tensor(
+        [float(v) for v in args.alpha_init.split(",")], device=device, dtype=dtype
+    )
 
     # -- results container
     results = []

@@ -1,4 +1,17 @@
 __pycache__/
 *.pyc
 legacy/
-results/
+
+# Exploratory runs are not tracked, but the runs behind the submitted figures are.
+results/*
+
+# Linear-regression simulation: c = 5, 20, 10
+!results/_20250809_172450/
+!results/_20250809_174749/
+!results/_20250809_181224/
+
+# Politeness study: c = 20, 50, 100, 200
+!results/_20260916_190000/
+!results/_20260916_190100/
+!results/_20260916_190200/
+!results/_20260916_190300/

@@ -1,3 +1,8 @@
+# Requires Python >= 3.11 (numpy 2.3.1 does not build/install on 3.9 or 3.10).
+#
+# The archived results in results/ were produced on Linux x86_64 with Python 3.11.16
+# and the torch 2.5.1+cu124 wheel. pip picks the wheel matching your own platform; the
+# CPU wheel of the same version gives the same numbers, and no GPU is needed.
 matplotlib==3.10.3
 numpy==2.3.1
 pandas==2.3.1
@@ -6,4 +11,5 @@ scipy==1.16.0
 statsmodels==0.14.5
 torch==2.5.1
 tqdm==4.67.1
+typeguard==4.5.2
 xgboost==3.0.2

@@ -626,7 +626,7 @@ def general_estimate_moments_mcar(
     ]
     # E_psi1_psi1T = (psi1_1.T @ psi1_1) / X1.shape[0]
 
-    # # *** DEBUG 打印 ***
+    # # *** DEBUG print ***
     # for idx, E_phi in enumerate(E_phi_phiT_list, 1):
     #     print(f"\nE[phi{idx} phi{idx}^T] =\n", E_phi)
     # print("\nE[psi1 psi1^T] =\n", E_psi1_psi1T)
@@ -885,6 +885,38 @@ def general_estimate_moments_function_mar(
 # 4) M-matrix & variance
 # ----------------------------------------------------------------------
 
+
+# ---------------------------------------------------------------------------
+# Diagnostic: largest spectral norm of the calibration matrix M seen so far.
+#
+# The bounded-calibration formulation constrains M to the spectral-norm ball
+# {M : ||M||_sp <= C_M}. The estimators below apply the unconstrained projection
+# coefficient, which coincides with the constrained minimiser whenever it lies inside
+# the ball. Recording the realised maximum lets a run certify that a declared C_M was
+# never binding.
+# ---------------------------------------------------------------------------
+_M_SPEC_MAX = {"value": 0.0}
+
+
+def reset_m_spec_norm() -> None:
+    """Reset the running maximum of ||M||_sp."""
+    _M_SPEC_MAX["value"] = 0.0
+
+
+def get_m_spec_norm() -> float:
+    """Largest ||M||_sp recorded since the last reset."""
+    return _M_SPEC_MAX["value"]
+
+
+def _record_m_spec_norm(M: Tensor) -> None:
+    try:
+        v = torch.linalg.matrix_norm(M, ord=2).item()
+    except Exception:
+        return
+    if v > _M_SPEC_MAX["value"]:
+        _M_SPEC_MAX["value"] = v
+
+
 def general_estimate_m_matrix_mcar(
     moment_dict: Dict[str, List[Tensor] | Tensor],
     alphas: Tensor,  # expects shape (3,)
@@ -939,6 +971,7 @@ def general_estimate_m_matrix_mcar(
     weighted_sum = sum(alpha * E_phi for alpha, E_phi in valid_pairs)
     # 3. Compute M   (torch.linalg.inv handles CPU / CUDA transparently)
     M = -cov_psi1_phi1 @ torch.linalg.inv(weighted_sum)  # (d, d)
+    _record_m_spec_norm(M)
     return M
 
 def general_estimate_m_matrix_mar(
@@ -960,6 +993,7 @@ def general_estimate_m_matrix_mar(
 
     # 2. Compute M
     M = - psi1_phi1 @ torch.linalg.inv(phi_agg)      # (d, d)
+    _record_m_spec_norm(M)
     return M
 
 def general_estimate_variance_mcar(
@@ -1023,7 +1057,7 @@ def general_estimate_variance_mcar(
     # ---------------- 4) covariance estimator ---------------
     correction = cov_psi_phi1 @ inv_weighted_phi_cov @ cov_psi_phi1.T  # (d, d)
     cov_theta  = E_psi1_psi1T / alpha1 - correction                    # (d, d)
-    # # *** DEBUG 打印 ***
+    # # *** DEBUG print ***
     # print("\ninv_weighted_phi_cov =\n", inv_weighted_phi_cov)
     # print("\ncov_psi_phi1 =\n", cov_psi_phi1)
     # print("\ncorrection =\n", correction)
@@ -1369,13 +1403,13 @@ def _adam_section(
 
 
 def _aug_lagrange_section(
-    f: Callable[[Tensor], Tensor],          #   目标函数 f(α) →  Tensor(1,)
+    f: Callable[[Tensor], Tensor],          #   objective f(alpha) -> Tensor(1,)
     lo: float,
     hi: float,
     *,
     # ----- AL parameters -----
-    g: Callable[[Tensor], Tensor] | None = None,   # 约束函数 g(α) ≤ 0，可为 None
-    tau: float = 0.0,                              # τ，若 g 给定则用 g(α)−τ
+    g: Callable[[Tensor], Tensor] | None = None,   # constraint g(alpha) <= 0; may be None
+    tau: float = 0.0,                              # tau; when g is given the constraint is g(alpha) - tau
     lambda_init: float = 0.0,
     rho_init: float = 10.0,
     # ----- optimisation -----

@@ -1,0 +1,44 @@
+Data license — `data/polite_scores_with_ds.csv`
+
+This file is a derivative of the Stanford Politeness Corpus and is therefore
+distributed under the Creative Commons Attribution 4.0 International license
+(CC BY 4.0), the license of the original corpus.
+
+    https://creativecommons.org/licenses/by/4.0/
+
+Attribution
+-----------
+
+Original corpus:
+
+    Cristian Danescu-Niculescu-Mizil, Moritz Sudhof, Dan Jurafsky, Jure
+    Leskovec, and Christopher Potts. A computational approach to politeness
+    with application to social factors. Proceedings of the 51st Annual Meeting
+    of the Association for Computational Linguistics (Volume 1: Long Papers),
+    pages 250-259, Sofia, Bulgaria, 2013.
+    https://aclanthology.org/P13-1025
+
+Distributed via ConvoKit (Cornell Conversational Analysis Toolkit),
+Copyright (C) 2017-2020 The ConvoKit Developers:
+
+    https://convokit.cornell.edu/documentation/wiki_politeness.html
+
+Changes made to the original
+----------------------------
+
+As required by CC BY 4.0 section 3(a)(1)(B), the modifications are:
+
+1. The corpus was restricted to the cleaned subset of 5515 requests used by
+
+       Wenlong Ji, Lihua Lei, and Tijana Zrnic. Predictions as surrogates:
+       revisiting surrogate outcomes in the age of AI. arXiv:2501.09731, 2025.
+
+2. Two columns of AI-predicted politeness scores were added:
+   `gpt_score` (GPT-4o-mini) and `predicted_score` (DeepSeek-V3.1).
+
+3. Rows missing any of `gpt_score`, `predicted_score`, `Normalized Score`,
+   `Feature_3`, or `Feature_10` are dropped at load time by `politeness.py`;
+   the file itself retains all 5515 rows.
+
+The comparative preference label used in the paper is not stored in the file.
+It is derived at load time as V = 1{|W1 - Y| <= |W2 - Y|} (`politeness.py`).

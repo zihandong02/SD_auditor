@@ -24,11 +24,11 @@ class MLPRegressor1(nn.Module):
     def __init__(self, n_in: int):
         super().__init__()
         self.net = nn.Sequential(
-            nn.Linear(n_in, 64),   nn.ReLU(),      # ↑ 输入层加宽
-            nn.Linear(64, 128),    nn.ReLU(),      # ↑ 新增隐藏层
+            nn.Linear(n_in, 64),   nn.ReLU(),      # widened input layer
+            nn.Linear(64, 128),    nn.ReLU(),      # extra hidden layer
             nn.Linear(128, 64),    nn.ReLU(),
             nn.Linear(64, 32),     nn.ReLU(),
-            nn.Linear(32, 1)                      # 输出层
+            nn.Linear(32, 1)                      # output layer
         )
 
     def forward(self, x):             # (batch, n_in) → (batch, 1)

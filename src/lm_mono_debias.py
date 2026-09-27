@@ -57,7 +57,14 @@ from .estimators import (
     train_alpha_with_penalty,                # train a neural network to predict α₁
     train_alpha_aug_lagrange_trace,          # train a neural network to predict α₁
     lm_mono_debias_estimate,                 # 3-fold cross-fit efficient θ̂
+    reset_m_spec_norm,                       # diagnostic: reset max ||M||_sp
+    get_m_spec_norm,                         # diagnostic: read  max ||M||_sp
 )
+
+# Relative tolerance on the expected acquisition cost. The augmented-Lagrangian solve
+# enforces E[c*alpha1 + alpha2] <= tau only approximately, so a small positive excess is
+# numerical noise rather than an infeasible design.
+BUDGET_RTOL = 1e-2
 
 
 # ======================================================================
@@ -532,11 +539,16 @@ def lm_mono_debias_budget_constrained_obtain_alpha_mar_cov00(
     cost = moment_fn(alpha_model)["E[c alpha1 + alpha2]"].item()
     print(f"[MAR] Final constraint E[c*alpha1 + alpha2] = {cost:.6f} (tau = {tau:.6f})")
 
-    # 3) Verify whether the constraint is satisfied
-    if cost <= tau:
-        print("✅ Constraint satisfied: E[c*alpha1 + alpha2] <= tau")
+    # 3) Verify whether the constraint is satisfied, up to the numerical tolerance of
+    #    the augmented-Lagrangian solve (the empirical budget is enforced only up to a
+    #    tolerance delta, cf. Algorithm 2).
+    rel_excess = (cost - tau) / tau
+    if rel_excess <= BUDGET_RTOL:
+        print(f"[MAR] Constraint satisfied (relative excess {rel_excess:+.2e}, "
+              f"tolerance {BUDGET_RTOL:.0e})")
     else:
-        print("❌ Constraint violated: E[c*alpha1 + alpha2] > tau")
+        print(f"[MAR] Constraint exceeded beyond tolerance: relative excess "
+              f"{rel_excess:+.2e} > {BUDGET_RTOL:.0e}")
     trace_or_cov_fn = general_get_trace_variance_function_alpha_mar(
         moment_fn=moment_fn,
         return_full=True
@@ -626,10 +638,13 @@ def lm_mono_debias_budget_constrained_obtain_alpha_mar_trace(
 
     cost = moment_fn(alpha_model)["E[c alpha1 + alpha2]"].item()
     print(f"[MAR] Final constraint E[c*alpha1 + alpha2] = {cost:.6f} (tau = {tau:.6f})")
-    if cost <= tau:
-        print("✅ Constraint satisfied: E[c*alpha1 + alpha2] <= tau")
+    rel_excess = (cost - tau) / tau
+    if rel_excess <= BUDGET_RTOL:
+        print(f"[MAR] Constraint satisfied (relative excess {rel_excess:+.2e}, "
+              f"tolerance {BUDGET_RTOL:.0e})")
     else:
-        print("❌ Constraint violated: E[c*alpha1 + alpha2] > tau")
+        print(f"[MAR] Constraint exceeded beyond tolerance: relative excess "
+              f"{rel_excess:+.2e} > {BUDGET_RTOL:.0e}")
 
     cov_full_fn = general_get_trace_variance_function_alpha_mar(moment_fn, return_full=True)
     cov_full = cov_full_fn(alpha_model)  # (d, d)
@@ -668,6 +683,7 @@ def lm_fix_alpha(
 
     device, dtype = theta_star.device, theta_star.dtype
     set_global_seed(seed)
+    reset_m_spec_norm()
 
     # ---------- Stage-1 : obtain α* -------------------------
     X1, Y1, W1_1, W2_1, V1, R1 = lm_generate_obs_data_mcar(
@@ -814,6 +830,7 @@ def lm_fix_alpha(
     return dict(
         alpha_opt = ((alpha_opt.cpu() * 1e4).round() / 1e4).tolist(),
         cov00_opt = float(cov00_opt),
+        max_M_spec_norm = float(get_m_spec_norm()),
         mean_l2_opt = float(sum(err_opt)  / reps),
         mean_l2_mar = float(sum(err_mar)  / reps),
         mean_l2_base= float(sum(err_base) / reps),
@@ -990,19 +1007,19 @@ def lm_change_alpha_every_iter(
 
     device, dtype = theta_star.device, theta_star.dtype
 
-    # -------- baseline α (α₂ = 0) — 常数，循环外即可 --------
+    # -------- baseline alpha (alpha_2 = 0): constant, so build it outside the loop --------
     alpha1_base  = max(1e-6, min(1 - 1e-6, tau / c))
     alpha_baseline = torch.tensor(
         [alpha1_base, 0.0, 1.0 + (c - 1.0) * alpha1_base - tau],
         device=device, dtype=dtype
     )
 
-    # -------- 容器 --------
+    # -------- containers --------
     err_opt, err_mar, err_base, err_ols = [], [], [], []
     len_opt, len_mar, len_base, len_ols = [], [], [], []
     cov_opt, cov_mar, cov_base, cov_ols = [], [], [], []
 
-    # ======== Stage-2 循环，每次都重新执行 Stage-1 搜策略 ========
+    # ======== Stage-2 loop; the Stage-1 rule search is redone on every pass ========
     for rep in tqdm(range(reps), total=reps):
         set_global_seed(seed + rep)
 

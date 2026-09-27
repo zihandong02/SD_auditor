@@ -1,0 +1,17 @@
+{
+    "cmd": "politeness.py --tau_vals 10,10.5,11,11.5,12,12.5,13,13.5,14,14.5,15 --c_vals 20",
+    "args": {
+        "device": "auto",
+        "seed": 43,
+        "distributed": false,
+        "n1": 1500,
+        "n2_per_rep": 3000,
+        "reps": 100,
+        "alpha_level": 0.1,
+        "tau_vals": "10,10.5,11,11.5,12,12.5,13,13.5,14,14.5,15",
+        "c_vals": "20",
+        "alpha_init": "1.0,0.0,0.0",
+        "n_total": 5515
+    },
+    "timestamp": "2026-09-16T19:00:00"
+}

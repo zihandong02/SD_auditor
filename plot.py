@@ -39,10 +39,10 @@ def plot_l2_vs_tau(
 
     # pretty labels
     nice = {
-        "mean_l2_opt":  "OPT",
-        "mean_l2_mar":  "MAR",
-        "mean_l2_base": "Base",
-        "mean_l2_ols":  "OLS",
+        "mean_l2_opt":  "PCAL-CA",
+        "mean_l2_mar":  "PCAL",
+        "mean_l2_base": "label+unlabeled",
+        "mean_l2_ols":  "label-only",
     }
     labels = [nice.get(col, col.replace("mean_l2_", "").upper()) for col in l2_cols]
 
@@ -85,11 +85,12 @@ def plot_ci_and_cov_vs_tau(
     # pick vibrant colors and distinct markers
     colors  = ["#1b9e77", "#d95f02", "#7570b3", "#e7298a"]
     markers = ["o", "s", "^", "D"]
-    labels  = ["MCAR", "MAR", "Real label", "Real label only"]
+    suffixes = ["opt", "mar", "base", "ols"]
+    labels   = ["PCAL-CA", "PCAL", "label+unlabeled", "label-only"]
 
-    # auto-detect length and coverage columns by prefix
-    length_cols   = [c for c in df.columns if c.startswith("mean_len_")]
-    coverage_cols = [c for c in df.columns if c.startswith("covg_")]
+    # pair each curve with its column by suffix, not by column order
+    length_cols   = [f"mean_len_{s}" for s in suffixes]
+    coverage_cols = [f"covg_{s}" for s in suffixes]
 
     # create a 1×2 subplot
     fig, (ax_len, ax_cov) = plt.subplots(1, 2, figsize=(12, 4))
@@ -101,6 +102,7 @@ def plot_ci_and_cov_vs_tau(
         ax_len.plot(df.index, df[col], marker=m, linestyle="-", color=c, label=lab)
     ax_len.set_xlabel(r"$\tau$")
     ax_len.set_ylabel("CI length")
+    ax_len.set_title(r"Lengths of confidence intervals with varying $\tau$")
     ax_len.grid(True, linestyle="--", alpha=0.5)
     ax_len.legend(title="Method")
 
@@ -115,6 +117,7 @@ def plot_ci_and_cov_vs_tau(
     )
     ax_cov.set_xlabel(r"$\tau$")
     ax_cov.set_ylabel("CI coverage")
+    ax_cov.set_title(r"Coverage of confidence interval with varying $\tau$")
     ax_cov.set_ylim(0.5, 1.05)
     ax_cov.grid(True, linestyle="--", alpha=0.5)
     ax_cov.legend(title="Method", loc="lower right")
@@ -125,7 +128,8 @@ def plot_ci_and_cov_vs_tau(
 
     # adjust layout and save (leave room for suptitle)
     fig.tight_layout(rect=[0, 0, 1, 0.95])
-    savepath = out_dir / f"{prefix}_vs_tau.pdf"
+    suffix = "" if c_value is None else f"_c{c_value:g}"
+    savepath = out_dir / f"{prefix}_vs_tau{suffix}.pdf"
     fig.savefig(savepath, bbox_inches="tight")
     plt.close(fig)
     print(f"[INFO] saved combined plot to {savepath}")
@@ -137,6 +141,9 @@ def main():
     parser.add_argument("--out_dir", required=True, help="Directory in which to save the figure")
     parser.add_argument("--alpha_level", type=float, default=0.10, help="Significance level (default: 0.10)")
     parser.add_argument("--c", type=float, required=True, help="Value of c to display at the top of the figure")
+    parser.add_argument("--prefix", default="ci_cov",
+                        help="Filename prefix; the figure is written to "
+                             "'{prefix}_vs_tau_c{c}.pdf'")
     args = parser.parse_args()
 
     csv_path = Path(args.csv)
@@ -158,6 +165,7 @@ def main():
         df,
         alpha_level=args.alpha_level,
         out_dir=out_dir,
+        prefix=args.prefix,
         c_value=args.c,
     )
 

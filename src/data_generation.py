@@ -62,22 +62,31 @@ def lm_generate_complete_data(
     device: Optional[torch.device] = None,
 ) -> Tuple[torch.Tensor, ...]:
     """
-    Draw complete data for the Gaussian linear-mixture model
+    Draw complete data for the linear model with two AI-generated pseudo-outcomes
 
-        X  ~ 𝓝(0, Σ_X)      shape (n, d_x)
-        U1 ~ 𝓝(0, Σ_U1)     shape (n, d_u1)
-        U2 ~ 𝓝(0, Σ_U2)     shape (n, d_u2)
+        X   ~ ��(0, Σ_X)                      shape (n, d_x)
+        θ̃_1 = θ* + ��(0, 0.2² I),  θ̃_2 = θ* + ��(0, 0.1² I)
 
-        Y  = X·θ* + U1·β1* + U2·β2* + ε
-        W1 = X·θ* + U1·β1*             + ε₂
-        W2 = X·θ*             + U2·β2* + ε₃
-        V  = 𝟙{|W1 − Y| ≤ |W2 − Y|}
+        Y  = X·θ*  + ε
+        W1 = X·θ̃_1 + ε₂ + 0.075·ε
+        W2 = X·θ̃_2 + ε₃ + 0.075·ε
+        V  = ��{|W1 − Y| ≤ |W2 − Y|}
+
+    The three noise terms are scaled from the single ``sigma_eps`` argument:
+    sd(ε) = 8·sigma_eps, sd(ε₂) = 2·sigma_eps, sd(ε₃) = 3·sigma_eps. With the
+    default ``sigma_eps=2.0`` used for the reported figures this gives variances
+    256, 16 and 36.
+
+    θ̃_1 and θ̃_2 are re-drawn on every call.
+
+    ``d_u1``, ``d_u2``, ``beta1_star``, ``beta2_star``, ``Sigma_U1`` and ``Sigma_U2``
+    are retained for compatibility with the earlier latent-variable variants kept in
+    the commented-out lines below, and are not used.
 
     Returns
     -------
-    (X, U1, U2, Y, W1, W2, V)
-        The first three tensors have shape ``(n, d_·)``,
-        the last four are column vectors ``(n, 1)``.
+    (X, Y, W1, W2, V)
+        ``X`` has shape ``(n, d_x)``; the rest are column vectors ``(n, 1)``.
     """
     device = utils.get_device() if device is None else device
 
@@ -261,7 +270,7 @@ def general_generate_mar(
     R = torch.multinomial(alpha, num_samples=1).squeeze(1) + 1  # (n,)
     R = R.unsqueeze(1)
 
-    # 3. Clone observed copies (Y,V 需 float 以存 NaN)
+    # 3. Clone observed copies (Y, V must be float to hold NaNs)
     X_obs  = X.clone()
     Y_obs  = Y.clone().float()
     W1_obs = W1.clone()
