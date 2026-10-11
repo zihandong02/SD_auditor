@@ -64,13 +64,13 @@ def lm_generate_complete_data(
     """
     Draw complete data for the linear model with two AI-generated pseudo-outcomes
 
-        X   ~ ��(0, Σ_X)                      shape (n, d_x)
-        θ̃_1 = θ* + ��(0, 0.2² I),  θ̃_2 = θ* + ��(0, 0.1² I)
+        X   ~ Normal(0, Σ_X)                      shape (n, d_x)
+        θ̃_1 = θ* + Normal(0, 0.2² I),  θ̃_2 = θ* + Normal(0, 0.1² I)
 
         Y  = X·θ*  + ε
         W1 = X·θ̃_1 + ε₂ + 0.075·ε
         W2 = X·θ̃_2 + ε₃ + 0.075·ε
-        V  = ��{|W1 − Y| ≤ |W2 − Y|}
+        V  = 1{|W1 − Y| ≤ |W2 − Y|}
 
     The three noise terms are scaled from the single ``sigma_eps`` argument:
     sd(ε) = 8·sigma_eps, sd(ε₂) = 2·sigma_eps, sd(ε₃) = 3·sigma_eps. With the
