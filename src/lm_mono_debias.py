@@ -310,6 +310,10 @@ def lm_mono_debias_budget_constrained_obtain_alpha_mcar_cov00(
         method="adam",
         device=device
     )
+    # check ||M||_sp at the selected rule on both folds (the search returns after a final update)
+    with torch.no_grad():
+        for f in cov00_funcs:
+            f(alpha1_opt)
     
 
     # ---------- construct full α vector ------------------
@@ -830,6 +834,8 @@ def lm_fix_alpha(
     return dict(
         alpha_opt = ((alpha_opt.cpu() * 1e4).round() / 1e4).tolist(),
         cov00_opt = float(cov00_opt),
+        max_M_spec_norm_stage1_ca = float(get_m_spec_norm("stage1_ca")),
+        max_M_spec_norm_stage1_aware = float(get_m_spec_norm("stage1_aware")),
         max_M_spec_norm = float(get_m_spec_norm()),
         mean_l2_opt = float(sum(err_opt)  / reps),
         mean_l2_mar = float(sum(err_mar)  / reps),

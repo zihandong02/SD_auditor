@@ -5,13 +5,13 @@ legacy/
 # Exploratory runs are not tracked, but the runs behind the submitted figures are.
 results/*
 
-# Linear-regression simulation: c = 5, 20, 10
-!results/_20250809_172450/
-!results/_20250809_174749/
-!results/_20250809_181224/
+# Linear-regression simulation: c = 5, 10, 20
+!results/_20261026_185354/
+!results/_20261026_185540/
+!results/_20261026_185614/
 
 # Politeness study: c = 20, 50, 100, 200
-!results/_20260916_190000/
-!results/_20260916_190100/
-!results/_20260916_190200/
-!results/_20260916_190300/
+!results/_20261102_224114/
+!results/_20261102_223146/
+!results/_20261102_223447/
+!results/_20261102_222708/

@@ -1,0 +1,17 @@
+{
+    "cmd": "politeness.py --tau_vals 35,40,45,50,55,60,65,70,75,80 --c_vals 100 --device cpu",
+    "args": {
+        "device": "cpu",
+        "seed": 43,
+        "n1": 1500,
+        "n2_per_rep": 3000,
+        "reps": 100,
+        "alpha_level": 0.1,
+        "C_M": 10.0,
+        "tau_vals": "35,40,45,50,55,60,65,70,75,80",
+        "c_vals": "100",
+        "alpha_init": "1.0,0.0,0.0",
+        "n_total": 5515
+    },
+    "timestamp": "2026-11-02T22:34:47.583593"
+}

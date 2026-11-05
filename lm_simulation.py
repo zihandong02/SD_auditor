@@ -28,6 +28,7 @@ import pandas as pd
 sys.path.append(os.path.abspath(".."))  # adjust if needed
 
 from src.utils      import set_global_seed, get_device, dump_run_simple
+from src.estimators import set_calibration_radius
 from src.lm_mono_debias import lm_fix_alpha, lm_change_alpha_every_iter, lm_mcar_extended  # Algorithm‑1 wrapper
 
 # =====================================================================
@@ -67,6 +68,8 @@ def parse_args() -> argparse.Namespace:
                         help="comma‑separated list, e.g. '3,4,5'")
     parser.add_argument("--c",           default=10.0,  type=float)
     parser.add_argument("--alpha_init",  default="1.0,0.0,0.0")
+    parser.add_argument("--C_M",         default=10.0,  type=float,
+                        help="calibration radius; a run stops if ||M||_sp exceeds it")
 
     return parser.parse_args()
 
@@ -87,6 +90,7 @@ def run_experiment(args: argparse.Namespace, rank: int = 0, world_size: int = 1)
         print(f"[INFO] using device: {device}; rank {rank}/{world_size}")
 
     set_global_seed(args.seed + rank)  # different seed per rank for diversity
+    set_calibration_radius(args.C_M)
 
     # ---------- ground‑truth parameters ----------
     theta_star = torch.arange(1, args.d_x  + 1, device=device, dtype=torch.float32) * 0.2

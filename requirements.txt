@@ -1,8 +1,6 @@
-# Requires Python >= 3.11 (numpy 2.3.1 does not build/install on 3.9 or 3.10).
-#
-# The archived results in results/ were produced on Linux x86_64 with Python 3.11.16
-# and the torch 2.5.1+cu124 wheel. pip picks the wheel matching your own platform; the
-# CPU wheel of the same version gives the same numbers, and no GPU is needed.
+# Requires Python 3.11 or 3.12 and a platform supported by the pinned packages.
+# Use CPU execution with OMP_NUM_THREADS=1 for reproduction; no GPU is needed.
+# Floating-point results can vary across runtimes; see README.md.
 matplotlib==3.10.3
 numpy==2.3.1
 pandas==2.3.1

@@ -75,7 +75,7 @@ def lm_fit_ols(X: Tensor, Y: Tensor) -> Tensor:
     """
     # Use least-squares solver (stable on CPU / CUDA)
     #   θ̂ = (XᵀX)⁻¹ XᵀY   is equivalent to   lstsq(X, Y)
-    sol = torch.linalg.lstsq(X, Y).solution   # (n_features, 1)
+    sol = torch.linalg.lstsq(X, Y, driver="gels").solution   # (n_features, 1)
     return sol.squeeze(1)                                  # (n_features,)
 
 
@@ -113,7 +113,7 @@ def lm_fit_wls(
     Xw = X * sqrt_w                            # (n_samples, n_features)
     Yw = Y * sqrt_w                            # (n_samples, 1)
 
-    sol = torch.linalg.lstsq(Xw, Yw).solution  # (n_features, 1)
+    sol = torch.linalg.lstsq(Xw, Yw, driver="gels").solution  # (n_features, 1)
     return sol.squeeze(1)                                    # (n_features,)
 
 # ----------------------------------------------------------------------
@@ -887,34 +887,55 @@ def general_estimate_moments_function_mar(
 
 
 # ---------------------------------------------------------------------------
-# Diagnostic: largest spectral norm of the calibration matrix M seen so far.
+# Calibration radius C_M and the spectral norm of the calibration matrix M.
 #
 # The bounded-calibration formulation constrains M to the spectral-norm ball
-# {M : ||M||_sp <= C_M}. The estimators below apply the unconstrained projection
-# coefficient, which coincides with the constrained minimiser whenever it lies inside
-# the ball. Recording the realised maximum lets a run certify that a declared C_M was
-# never binding.
+# {M : ||M||_sp <= C_M}. The code applies the unconstrained coefficient
+# M = -A B^{-1}, which coincides with the constrained minimiser whenever it lies inside
+# the ball. Every M is therefore recorded and checked against C_M: in Stage 1 at every
+# candidate rule of the covariate-agnostic ("stage1_ca") and covariate-aware
+# ("stage1_aware") searches, and in Stage 2 at every inference fold ("stage2"). A run
+# stops with CalibrationRadiusExceeded as soon as ||M||_sp > C_M, so a run that finishes
+# has computed the bounded-calibration procedure exactly.
 # ---------------------------------------------------------------------------
-_M_SPEC_MAX = {"value": 0.0}
+C_M = 10.0
+_M_SPEC_MAX = {"stage1_ca": 0.0, "stage1_aware": 0.0, "stage2": 0.0}
+
+
+class CalibrationRadiusExceeded(RuntimeError):
+    """||M||_sp > C_M, so the unconstrained and bounded calibrations differ."""
+
+
+def set_calibration_radius(c_m: float) -> None:
+    """Set the calibration radius C_M used by the check."""
+    global C_M
+    c_m = float(c_m)
+    if not 0 < c_m < float("inf"):
+        raise ValueError(f"C_M must be finite and positive, got {c_m}")
+    C_M = c_m
 
 
 def reset_m_spec_norm() -> None:
-    """Reset the running maximum of ||M||_sp."""
-    _M_SPEC_MAX["value"] = 0.0
+    """Reset the running maxima of ||M||_sp for all stages."""
+    for stage in _M_SPEC_MAX:
+        _M_SPEC_MAX[stage] = 0.0
 
 
-def get_m_spec_norm() -> float:
-    """Largest ||M||_sp recorded since the last reset."""
-    return _M_SPEC_MAX["value"]
+def get_m_spec_norm(stage: str = "stage2") -> float:
+    """Largest ||M||_sp recorded in `stage` since the last reset."""
+    return _M_SPEC_MAX[stage]
 
 
-def _record_m_spec_norm(M: Tensor) -> None:
+def _record_m_spec_norm(M: Tensor, stage: str = "stage2") -> None:
+    # A non-finite M or a failed norm counts as exceeding the radius.
     try:
-        v = torch.linalg.matrix_norm(M, ord=2).item()
+        v = torch.linalg.matrix_norm(M, ord=2).item() if bool(torch.isfinite(M).all()) else float("inf")
     except Exception:
-        return
-    if v > _M_SPEC_MAX["value"]:
-        _M_SPEC_MAX["value"] = v
+        v = float("inf")
+    if v > _M_SPEC_MAX[stage]:
+        _M_SPEC_MAX[stage] = v
+    if not v <= C_M:
+        raise CalibrationRadiusExceeded(f"||M||_sp = {v:.4f} is not <= C_M = {C_M:g} ({stage})")
 
 
 def general_estimate_m_matrix_mcar(
@@ -1159,6 +1180,7 @@ def general_get_trace_variance_function_alpha_mcar(
         # -------- 3) compute covariance estimator -------------------------
         weighted_phi_cov = sum(a * E for a, E in zip(alpha_vec, E_phi_phiT_lst))
         inv_weighted = torch.linalg.inv(weighted_phi_cov)
+        _record_m_spec_norm(-Cov_psi_phi1.detach() @ inv_weighted.detach(), "stage1_ca")
 
         cov_theta = E_psi1_psi1T / alpha_vec[0] - Cov_psi_phi1 @ inv_weighted @ Cov_psi_phi1.T
         out = cov_theta if return_full else torch.trace(cov_theta)
@@ -1195,6 +1217,7 @@ def general_get_cov00_function_alpha_mcar(
         # -------- 3) compute covariance estimator ------------------------
         weighted_phi_cov = sum(a * E for a, E in zip(alpha_vec, E_phi_phiT_lst))
         inv_weighted = torch.linalg.inv(weighted_phi_cov)
+        _record_m_spec_norm(-Cov_psi_phi1.detach() @ inv_weighted.detach(), "stage1_ca")
 
         cov_theta = E_psi1_psi1T / alpha_vec[0] - Cov_psi_phi1 @ inv_weighted @ Cov_psi_phi1.T
         return cov_theta[0, 0]  # return variance of θ̂₀
@@ -1237,6 +1260,7 @@ def general_get_trace_variance_function_alpha_mar(
 
         # 3) Invert the weighted phi covariance
         inv_weighted = torch.linalg.inv(weighted_phi_cov)
+        _record_m_spec_norm(-Cov_psi_phi1.detach() @ inv_weighted.detach(), "stage1_aware")
 
         # 4) Compute the sandwich covariance estimator:
         #    Cov(θ̂) = E[ψ₁ψ₁ᵀ / α₁] − Cov(ψ₁, φ₁) @ [E[α φφᵀ]]⁻¹ @ Cov(ψ₁, φ₁)ᵀ
@@ -1279,6 +1303,7 @@ def general_get_cov00_function_alpha_mar(
         weighted_phi_cov = sum(E_alpha_phi_phiT_list)  # shape (d, d)
         # 3) Invert the weighted phi covariance
         inv_weighted = torch.linalg.inv(weighted_phi_cov)
+        _record_m_spec_norm(-Cov_psi_phi1.detach() @ inv_weighted.detach(), "stage1_aware")
 
         # 4) Compute the sandwich form: 
         #    Cov(theta) = E[psi1 psi1^T / alpha1] - Cov(psi1, phi1) * inv(E[alpha phi phi^T]) * Cov(psi1, phi1)^T
@@ -2029,7 +2054,7 @@ def lm_mono_debias_estimate(
     else:
         Xw, Yw = X_obs, Y_obs
 
-    theta_tilde = torch.linalg.lstsq(Xw, Yw).solution.view(-1)  # (d,)
+    theta_tilde = torch.linalg.lstsq(Xw, Yw, driver="gels").solution.view(-1)  # (d,)
 
     # ------------------------------------------------------------------
     # Step 2: correction term  (1/n) Σ_i φ_{r_i}

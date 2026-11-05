@@ -29,6 +29,8 @@ from src.estimators import (
     lm_fit_ols,
     reset_m_spec_norm,
     get_m_spec_norm,
+    set_calibration_radius,
+    CalibrationRadiusExceeded,
 )
 from src.lm_mono_debias import (
     lm_mono_debias_budget_constrained_obtain_alpha_mcar_cov00,
@@ -59,6 +61,8 @@ def parse_args() -> argparse.Namespace:
 
     # ---------- MCAR / CI parameters ----------
     parser.add_argument("--alpha_level", default=0.1, type=float)
+    parser.add_argument("--C_M", default=10.0, type=float,
+                        help="Calibration radius; a run stops if ||M||_sp exceeds it")
     parser.add_argument("--tau_vals", default="3,5,10", help="Comma-separated list of tau values")
     parser.add_argument("--c_vals", default="20,50,100,200", help="Comma-separated list of c values")
     parser.add_argument("--alpha_init", default="1.0,0.0,0.0",
@@ -151,6 +155,8 @@ def run_politeness_experiment(
             )
             success = True
             break
+        except CalibrationRadiusExceeded:
+            raise
         except Exception as e:
             print(f"[Warning] attempt {attempt+1}: {e}")
             continue
@@ -234,6 +240,8 @@ def run_politeness_experiment(
     return dict(
         alpha_opt=((alpha_opt.detach().cpu() * 1e4).round() / 1e4).tolist(),
         cov00_opt=float(cov00_opt),
+        max_M_spec_norm_stage1_ca=float(get_m_spec_norm("stage1_ca")),
+        max_M_spec_norm_stage1_aware=float(get_m_spec_norm("stage1_aware")),
         max_M_spec_norm=float(get_m_spec_norm()),
         mean_l2_opt=float(sum(err_opt) / reps),
         mean_l2_mar=float(sum(err_mar) / reps),
@@ -253,6 +261,7 @@ def main(args):
     """Main driver."""
     # ── setup ──────────────────────────────────────────────────────────────────
     set_global_seed(args.seed)
+    set_calibration_radius(args.C_M)
     if args.device == "auto":
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     else:
